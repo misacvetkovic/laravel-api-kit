@@ -1,15 +1,14 @@
 <?php
 
-use App\Http\Controllers\Api\V1\AuthController;
-use Grazulex\ApiRoute\Facades\ApiRoute;
-use Illuminate\Support\Facades\Route;
-
 /*
 |--------------------------------------------------------------------------
 | API Routes
 |--------------------------------------------------------------------------
 |
-| API routes are versioned using grazulex/laravel-apiroute.
+| API routes are versioned using grazulex/laravel-apiroute v2.x.
+| Versions are defined in config/apiroute.php and route files are
+| located in routes/api/{version}.php
+|
 | Supports URI path, header, query, and Accept header detection.
 | See config/apiroute.php for configuration options.
 |
