@@ -10,6 +10,8 @@ A production-ready, API-only Laravel 12 starter kit following the 2024-2025 REST
 
 - **API-Only** - No Blade, Vite, or frontend assets
 - **Token Authentication** - Laravel Sanctum for mobile/SPA auth
+- **Email Verification** - Built-in email verification flow with signed URLs
+- **Password Reset** - Secure password reset with token-based flow
 - **API Versioning** - URI-based versioning with deprecation support via [grazulex/laravel-apiroute](https://github.com/Grazulex/laravel-apiroute)
 - **Query Building** - Filtering, sorting, includes via [spatie/laravel-query-builder](https://github.com/spatie/laravel-query-builder)
 - **Data Objects** - Type-safe DTOs via [spatie/laravel-data](https://github.com/spatie/laravel-data)
@@ -17,6 +19,7 @@ A production-ready, API-only Laravel 12 starter kit following the 2024-2025 REST
 - **Modern Testing** - Pest PHP with Laravel HTTP testing
 - **Code Quality** - PHPStan (max level), Rector, and Pint with strict rules
 - **Rate Limiting** - Configurable per-route rate limiters
+- **Reusable Middleware** - ForceJsonResponse, LogApiRequests, EnsureEmailVerified
 - **Standardized Responses** - Consistent JSON response format
 
 ## Requirements
@@ -102,12 +105,13 @@ curl -X POST http://localhost:8080/api/v1/register \
 ```json
 {
   "success": true,
-  "message": "User registered successfully",
+  "message": "User registered successfully. Please check your email to verify your account.",
   "data": {
     "user": {
       "id": 1,
       "name": "John Doe",
       "email": "john@example.com",
+      "email_verified_at": null,
       "created_at": "2025-01-15T10:30:00+00:00"
     },
     "token": "1|abc123..."
@@ -144,6 +148,78 @@ curl -X POST http://localhost:8080/api/v1/logout \
   -H "Authorization: Bearer 1|abc123..." \
   -H "Accept: application/json"
 ```
+
+### Email Verification
+
+After registration, users receive a verification email. The kit integrates with Laravel's `MustVerifyEmail` contract.
+
+**Verify Email (via signed URL from email):**
+```bash
+curl -X POST "http://localhost:8080/api/v1/email/verify/{id}/{hash}?signature=..." \
+  -H "Authorization: Bearer 1|abc123..." \
+  -H "Accept: application/json"
+```
+
+**Resend Verification Email:**
+```bash
+curl -X POST http://localhost:8080/api/v1/email/resend \
+  -H "Authorization: Bearer 1|abc123..." \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{"email": "john@example.com"}'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Verification email sent successfully",
+  "data": null
+}
+```
+
+### Password Reset
+
+**Request Password Reset Link:**
+```bash
+curl -X POST http://localhost:8080/api/v1/forgot-password \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{"email": "john@example.com"}'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Password reset link sent to your email",
+  "data": null
+}
+```
+
+**Reset Password (with token from email):**
+```bash
+curl -X POST http://localhost:8080/api/v1/reset-password \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "email": "john@example.com",
+    "token": "reset-token-from-email",
+    "password": "newpassword123",
+    "password_confirmation": "newpassword123"
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Password reset successfully",
+  "data": null
+}
+```
+
+> **Note:** After a successful password reset, all user tokens are revoked for security.
 
 ## API Endpoints
 
@@ -387,6 +463,63 @@ Responses include rate limit information:
 X-RateLimit-Limit: 60
 X-RateLimit-Remaining: 59
 Retry-After: 60  # When limit exceeded
+```
+
+## Middleware
+
+The kit includes three production-ready middleware patterns that you can apply to your routes as needed.
+
+### Available Middleware
+
+| Alias | Class | Description |
+|-------|-------|-------------|
+| `force.json` | `ForceJsonResponse` | Ensures all responses are JSON formatted |
+| `log.api` | `LogApiRequests` | Logs API requests with timing information |
+| `verified` | `EnsureEmailVerified` | Requires verified email to access route |
+
+### ForceJsonResponse
+
+Automatically sets `Accept: application/json` header and converts non-JSON responses to JSON format.
+
+```php
+Route::middleware('force.json')->group(function () {
+    // All responses will be JSON
+});
+```
+
+### LogApiRequests
+
+Logs API requests with detailed information and adds `X-Response-Time` header to responses.
+
+**Logged data:** timestamp, method, URL, IP, user ID, status code, duration (ms), user agent.
+
+**Enable logging via environment:**
+```env
+APP_LOG_API_REQUESTS=true
+```
+
+```php
+Route::middleware('log.api')->group(function () {
+    // Requests will be logged
+});
+```
+
+### EnsureEmailVerified
+
+Protects routes that require a verified email address. Returns 403 if email is not verified.
+
+```php
+Route::middleware(['auth:sanctum', 'verified'])->group(function () {
+    // Only users with verified emails can access
+});
+```
+
+**Response when email not verified:**
+```json
+{
+  "success": false,
+  "message": "Your email address is not verified. Please verify your email to continue."
+}
 ```
 
 ## Testing
