@@ -21,6 +21,8 @@ A production-ready, API-only Laravel 12 starter kit following the 2024-2025 REST
 - **Rate Limiting** - Configurable per-route rate limiters
 - **Reusable Middleware** - ForceJsonResponse, LogApiRequests, EnsureEmailVerified
 - **Standardized Responses** - Consistent JSON response format
+- **Optional: API Idempotency** - RFC-compliant idempotency via [grazulex/laravel-api-idempotency](https://github.com/Grazulex/laravel-api-idempotency)
+- **Optional: Smart Rate Limiting** - Plan-aware throttling with quotas via [grazulex/laravel-api-throttle-smart](https://github.com/Grazulex/laravel-api-throttle-smart)
 
 ## Requirements
 
@@ -465,6 +467,83 @@ X-RateLimit-Remaining: 59
 Retry-After: 60  # When limit exceeded
 ```
 
+## Optional Packages
+
+The following packages are **suggested** (not required) and can be installed individually to extend the kit's capabilities. They are fully opt-in and will not affect existing behavior.
+
+### API Idempotency
+
+[grazulex/laravel-api-idempotency](https://github.com/Grazulex/laravel-api-idempotency) provides RFC-compliant idempotency for your API endpoints. It prevents duplicate operations when clients retry requests (critical for payments, order creation, etc.).
+
+**Install:**
+```bash
+composer require grazulex/laravel-api-idempotency
+```
+
+**Publish config (optional):**
+```bash
+php artisan vendor:publish --tag="api-idempotency-config"
+```
+
+**Usage — apply the middleware to mutation routes:**
+```php
+// routes/api/v1.php
+Route::middleware(['auth:sanctum', 'throttle:authenticated'])->group(function () {
+    Route::post('orders', [OrderController::class, 'store'])
+        ->middleware('idempotent');
+
+    Route::post('payments', [PaymentController::class, 'store'])
+        ->middleware('idempotent:required'); // Require Idempotency-Key header
+});
+```
+
+**Client-side — include the `Idempotency-Key` header:**
+```bash
+curl -X POST http://localhost:8080/api/v1/orders \
+  -H "Authorization: Bearer 1|abc123..." \
+  -H "Idempotency-Key: order_unique_key_123" \
+  -H "Content-Type: application/json" \
+  -d '{"product_id": 1, "quantity": 2}'
+```
+
+> **Attention:**
+> - Only apply the `idempotent` middleware to mutation routes (POST, PUT, PATCH). GET requests are naturally idempotent.
+> - The default storage driver is `cache`. For production with multiple servers, use the `redis` or `database` driver.
+> - Keys are scoped per user by default. Two different users can use the same key without conflict.
+
+---
+
+### Smart Rate Limiting
+
+[grazulex/laravel-api-throttle-smart](https://github.com/Grazulex/laravel-api-throttle-smart) provides plan-aware rate limiting with quotas, multiple algorithms (fixed window, sliding window, token bucket), and multi-tenant support. Ideal for SaaS APIs with subscription tiers.
+
+**Install:**
+```bash
+composer require grazulex/laravel-api-throttle-smart
+```
+
+**Publish config:**
+```bash
+php artisan vendor:publish --tag="throttle-smart-config"
+```
+
+**Usage — apply to routes where plan-based limiting is needed:**
+```php
+// routes/api/v1.php
+Route::middleware(['auth:sanctum', 'throttle.smart'])->group(function () {
+    Route::apiResource('posts', PostController::class);
+});
+```
+
+> **Attention:**
+> - This package **coexists** with Laravel's built-in `throttle:` middleware. You do not need to remove the existing rate limiters.
+> - If you want to **replace** the native throttle on specific routes, swap `throttle:authenticated` with `throttle.smart` on those routes only.
+> - Do **not** apply both `throttle:authenticated` and `throttle.smart` on the same route group — choose one per group to avoid double rate limiting.
+> - The default driver is `cache`. For production, `redis` is recommended for performance and distributed consistency.
+> - Configure your subscription plans in `config/throttle-smart.php` to match your business model (Free, Pro, Enterprise, etc.).
+
+---
+
 ## Middleware
 
 The kit includes three production-ready middleware patterns that you can apply to your routes as needed.
@@ -814,6 +893,8 @@ This project is open-sourced software licensed under the [MIT license](LICENSE).
 - [spatie/laravel-query-builder](https://github.com/spatie/laravel-query-builder) - Query Building
 - [spatie/laravel-data](https://github.com/spatie/laravel-data) - Data Transfer Objects
 - [dedoc/scramble](https://github.com/dedoc/scramble) - API Documentation
+- [grazulex/laravel-api-idempotency](https://github.com/Grazulex/laravel-api-idempotency) - API Idempotency (optional)
+- [grazulex/laravel-api-throttle-smart](https://github.com/Grazulex/laravel-api-throttle-smart) - Smart Rate Limiting (optional)
 - [Pest PHP](https://pestphp.com) - Testing Framework
 
 ## Support
